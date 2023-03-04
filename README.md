@@ -1,2 +1,2 @@
 # chickadees
-analysis of problem solving performance in chickadees 
+survival analysis of problem solving performance in chickadees
