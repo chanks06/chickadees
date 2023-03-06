@@ -105,6 +105,12 @@ lever2 = lever %>%
 #1st km curve for all birds in trial (no grouping)                                       
 lever2.km = survfit(Surv(lever2$time,lever2$status) ~ 1)
 
+#km table 
+summary(lever2.km)
+print(lever2.km)
+#median time to pull lever: 1320 seconds, or 22 minutes. 
+
+
 ggsurvplot(fit = lever2.km, data = lever2, risk.table = F, conf.int = T, surv.median.line = "hv") + 
   labs(title = "Survival Analysis of Chickadees Solving Lever Problem",
        y = "probability of not pulling lever", 
@@ -116,7 +122,7 @@ ggsurvplot(fit = lever2.km, data = lever2, risk.table = F, fun = "event", conf.i
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
 
-median(lever2$time)
+
 ```
 
 Transforming bird characteristic variables for survival analysis
