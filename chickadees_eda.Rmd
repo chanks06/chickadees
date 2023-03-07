@@ -148,7 +148,7 @@ lever2 = lever2 %>% mutate(expl_bin = case_when(
 Examining age and habitat 
 ```{r}
 #creating new km table, grouping by type of habitat and age of bird: 
-lever2.km2 = survfit(Surv(lever2$time,lever2$status) ~ lever2$habitat + strata(lever2$age)) 
+lever2.km2 = survfit(Surv(lever2$time,lever2$status) ~ lever2$habitat + lever2$age) 
 
 ggsurvplot(fit = lever2.km2, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
   labs(title = "Adult, Rural birds are better at Lever Pulling Task",
@@ -177,7 +177,7 @@ Dominance and Exploratory scores
 lever2.km3 = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$dom_bin) + strata(lever2$expl_bin))
 
 ggsurvplot(fit = lever2.km3, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
-  labs(title = "",
+  labs(title = "Dominant, Most Exploratory Birds are Best at Pulling Lever",
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
 
@@ -213,10 +213,10 @@ plot(weibullFit.lever3)
 
 #lognnormal 
 logFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "lnorm")
-summary(logFit.lever3) 
+summary(logFit.lever3)
 plot(logFit.lever3)
 
-#fits = c(weibullFit.lever3,expFit.lever3,logFit.lever3)
+gaussianFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "dgaussian")
 
 #assessing goodness of fits
 weibullFit.lever3$aic
@@ -225,6 +225,32 @@ logFit.lever3$aic
 
 
 
+#gammaFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "gamma")
+#gamma doesn't work either! 
+   
+#our lognormal distribution is the best fit 
+
+cdfcompcens(list(logFit.lever3,weibullFit.lever3),
+            legendtext=c("Lognormal","Weibull"),
+            xlab="Time to Pull Lever (seconds)",
+            plotstyle = "ggplot")
+
+
+qqcompcens(list(logFit.lever3,weibullFit.lever3), 
+           legendtext=c("Lognormal","Weibull")
+           ,plotstyle = "ggplot")
+
+
+meanlog = summary(logFit.lever3)$estimate[1]
+sdlog = summary(logFit.lever3)$estimate[2]
+
+#What percent of birds are expected to pull the lever within 30 minutes? 
+plnorm(1800, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
+#49% 
+
+#at what time would have the birds pulled the lever? 
+qlnorm(0.5, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
+#1874.5 
 
 
 ```
@@ -235,13 +261,14 @@ logFit.lever3$aic
 ```{r}
 survObject=Surv(lever3$left,lever3$right,type="interval2")
 
-weibullMod = survreg(survObject~lever3$domscore + lever3$explscore + strata(lever3$habitat) + strata(lever3$age), dist = "weibull")
+weibullMod = survreg(survObject~lever3$domscore + lever3$habitat + lever3$age, dist = "weibull")
 summary(weibullMod)
 
-expMod = survreg(survObject~lever3$domscore + lever3$explscore + strata(lever3$habitat) + strata(lever3$age), dist = "exponential")
+
+expMod = survreg(survObject~lever3$domscore + lever3$explscore, dist = "exponential")
 summary(expMod) #exponential does not work with multiple strata 
 
-logMod = survreg(survObject~lever3$domscore + lever3$explscore + strata(lever3$habitat) + strata(lever3$age), dist = "lognormal")
+logMod = survreg(survObject~lever3$domscore + strata(lever3$habitat) + strata(lever3$age), dist = "lognormal")
 summary(logMod)
 
 models = list(weibullMod, expMod, logMod)
@@ -252,7 +279,7 @@ for(i in models){
 #lognormal model is the best fit 
 
 #diagnostics 
-devresids=residuals(weibullMod,type="deviance")
+devresids=residuals(logMod,type="deviance")
 
 
 #lever3 %>%
@@ -270,6 +297,43 @@ devresids=residuals(weibullMod,type="deviance")
 #these models may not be most appropriate for this dataset
 
 ```
+Weibull regression modeling 100 birds each for 3 different levels of dominance
+```{r}
+summary(weibullMod)
+
+b0 =  10.094
+b1 = -3.764
+b2 =  0.904 
+b3 =  0.463
+
+sigma  = summary(weibullMod)$scale
+lever3$domscore
+
+dom25_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.25))
+dom50_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.50))
+dom75_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.75))
+
+modelfit = tibble(domscore = rep(c(.25,.50,.75), each = 100), 
+                  time = pmin(8000,c(dom25_rural_adult,dom50_rural_adult,dom75_rural_adult))) %>%                        mutate(status = ifelse(time == 8000, 0,1), dataType = "model") %>% 
+            mutate(dom_bin = case_when( 
+                                  domscore <= .34 ~ "low", 
+                                  domscore > .34 & domscore <=.67 ~ "medium", 
+                                  domscore > .67 ~ "high"))
+
+lever4 = lever3 %>% dplyr::select(domscore,dom_bin,time, status) 
+lever4 = lever4 %>% ungroup %>% dplyr::select(-indiv, -habitat) %>% 
+  mutate(dataType = "observed")
+
+together = bind_rows(lever4, modelfit)
+
+km7 = survfit(Surv(together$time, together$status) ~ strata(together$dom_bin) + strata(together$dataType))
+
+ggsurvplot(fit = km7, data = together, fun = "event", conf.int = F, legend = "right")
+```
+
+
+
+
 
 Cox proportional hazards model: 
 Explanation of use of cox proportional hazards regression from study: 
