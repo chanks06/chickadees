@@ -262,6 +262,7 @@ dist.0 = bind_rows(modelfit.0,observed.0)
 km.0 =  survfit(Surv(dist.0$time,dist.0$status) ~ strata(dist.0$dataType))
 
 ggsurvplot(fit = km.0, data = dist.0, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
+
 ```
 
 
@@ -392,59 +393,115 @@ paper2 = paper %>% group_by(status, indiv, habitat) %>% summarize (time = max(ts
 ggsurvplot(fit = paper2.km, data = paper2, risk.table = F, conf.int = T, fun = "event", surv.median.line = "hv") 
 
 ```
+Parametric fits
+```{r}
+paper3 = paper2 %>% mutate(left= ifelse(time == 0,time+.001,time), 
+                  right= ifelse(status == 1,left, NA))
+
+#weibull
+weibullFit.paper3=fitdistcens(data.frame(paper3[,c("left","right")]), dist = "weibull")
+summary(weibullFit.paper3)$estimate
+plot(weibullFit.paper3)
+
+#exponential - does not work! Should coerce weibull to act like exp with fixed arg shape = 1
+expFit.paper3 = fitdistcens(data.frame(paper3[,c("left","right")]), dist = "exp") 
+summary(expFit.paper3)
+plot(expFit.paper3)
+
+#lognnormal 
+logFit.paper3 = fitdistcens(data.frame(paper3[,c("left","right")]), dist = "lnorm")
+summary(logFit.paper3)$estimate
+plot(logFit.paper3)
+
+weibullFit.paper3$aic
+logFit.paper3$aic
+
+#log wins again! 
+```
+
+Plotting both non-parametric and parametric curves 
+```{r}
+#getting my values from lnorm fit: 
+
+meanlog = summary(logFit.paper3)$estimate[1]
+sdlog = summary(logFit.paper3)$estimate[2]
+
+#generating values from lnorm distribution
+lnorm_values = rlnorm(1000, meanlog = meanlog, sdlog = sdlog)
+
+modelfit.paper = tibble(time = pmin(8000,lnorm_values)) %>%                        
+                      mutate(status = ifelse(time == 8000, 0,1), dataType = "model") 
+
+observed.paper = paper2 %>% ungroup %>% dplyr::select(time, status) %>% mutate(dataType = "observed") 
+
+dist.paper = bind_rows(modelfit.paper,observed.paper)
+
+km.paper =  survfit(Surv(dist.paper$time,dist.paper$status) ~ strata(dist.paper$dataType))
+
+ggsurvplot(fit = km.paper, data = dist.paper, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Paper Ripping Probability")
+
+```
 
 Dominance characteristic did not have a huge affect on ability to solve problem: 
 ```{r}
-
-paper2 = paper2 %>%  mutate(dom_bin = case_when(domscore <= .34 ~ "low", 
-                                  (domscore > .34 & domscore <=.67) ~ "medium", 
-                                  domscore > .67 ~ "high"))
+paper2 = paper2 %>%  mutate(dom_bin = case_when(domscore <= .5 ~ "low", 
+                                                domscore > .5 ~ "high"))
 
 paper2.km2 = survfit(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
 
 ggsurvplot(fit = paper2.km2, data = paper2, risk.table = F, conf.int = F, fun = "event") + labs(title = "Does more dominant mean better at paper test?")
 
-#this is pretty close, I should run a log rank test to determine if there is a statistical difference in these curves 
-
+#log rank test 
 survdiff(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
-#dominance is not statistically  
 
-#age has the biggest the 
+paper2 %>% group_by(dom_bin, status) %>% count()
+#there are not enough observations in each group to create parametric curve on how dominance affects ability to rip paper to get at tasty worms
 ```
 
-
+looking at expl_score
 ```{r}
+paper2 %>% ggplot() + geom_histogram(aes(x = explscore))
+
+med_explscore = median(paper2$explscore)
+
 #binning expl_score 
+paper2 = paper2 %>% mutate(expl_bin = case_when(
+                                explscore <= med_explscore ~ "low", 
+                                explscore > med_explscore ~ "high"))
 
- paper2 = paper2 %>% mutate(expl_bin = case_when(
-                                explscore <= -1.5 ~ "low", 
-                                explscore > -1.5 & explscore <= 1 ~ "medium", 
-                                explscore > 1 ~ "high"))
+paper2 %>% group_by(expl_bin, status) %>% count()
+#there are enough non-censored observation 
 
+#examining km curves stratified by expl_bin: 
+paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ strata(paper2$expl_bin))
+
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "How does expl_score fit ability to rip paper")
+#pretty similar km curves....
+
+
+```
+How does habitat affect task completion? 
+```{r}
 #urban or rural: 
-paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$expl_bin))
+paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$habitat))
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds with Different Exploratory Scores")
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds")
 
-#rural birds are better at solving at the beginning, but by the end they have the same likelihood of solving problem. 
-
+#also very similar curves 
+survdiff(Surv(paper2$time,paper2$status) ~  paper2$habitat)
 ```
-
+How about age?
 ```{r}
-ggplot(paper2, aes(x = explscore, fill = habitat)) + geom_histogram()
-#most urban birds are less exploratory, likely due to availability of food
-```
-```{r}
-#comparing survival curves of urban vs. rural birds: 
-paper2.km.habitat = paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ paper2$habitat)
+paper2.km4 = survfit(Surv(paper2$time,paper2$status) ~  paper2$age)
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right", surv.median.line = 'hv') + 
-  labs(title = "Rural vs. Urban Birds")
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds")
 
-#logrank test: 
-survdiff(Surv(paper2$time,paper2$status) ~ paper2$habitat)
-#p = 0.6 says that the different is not statistically significant, however small sample size may come into play here. 
+#also very similar curves 
+survdiff(Surv(paper2$time,paper2$status) ~  paper2$habitat)
 ```
+
+
+
 Fitting parametric distribution
 ```{r}
 paper3 = paper2 %>% mutate(left= ifelse(time == 0,time+.001,time), 
