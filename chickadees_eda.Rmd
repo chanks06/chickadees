@@ -125,13 +125,12 @@ ggsurvplot(fit = lever2.km, data = lever2, risk.table = F, fun = "event", conf.i
 
 ```
 
-Transforming bird characteristic variables for survival analysis
+Binning bird characteristic variables for survival analysis
 ```{r}
 #binning domscore: 
 lever2 = lever2 %>%  mutate(dom_bin = case_when(
-                                          domscore <= .34 ~ "low", 
-                                          domscore > .34 & domscore <=.67 ~ "medium", 
-                                          domscore > .67 ~ "high"))
+                                          domscore <= .50 ~ "low", 
+                                          domscore > .50 ~ "high"))
 
 #distribution of explscore: 
 ggplot(data = lever2, aes(x = explscore)) + geom_histogram(binwidth = 3)
@@ -139,53 +138,44 @@ ggplot(data = lever2, aes(x = explscore)) + geom_histogram(binwidth = 3)
 
 #binning explscore: 
 lever2 = lever2 %>% mutate(expl_bin = case_when(
-                                explscore <= -1.5 ~ "low", 
-                                explscore > -1.5 & explscore <= 1 ~ "medium", 
-                                explscore > 1 ~ "high"))
-
+                                explscore <= -.89 ~ "low", 
+                                explscore > -.89 ~ "high"))
 ```
 
-Examining age and habitat 
+Age matters
 ```{r}
 #creating new km table, grouping by type of habitat and age of bird: 
-lever2.km2 = survfit(Surv(lever2$time,lever2$status) ~ lever2$habitat + lever2$age) 
+lever2.km2 = survfit(Surv(lever2$time,lever2$status) ~ lever2$age) 
 
 ggsurvplot(fit = lever2.km2, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
-  labs(title = "Adult, Rural birds are better at Lever Pulling Task",
+  labs(title = "Adults are better at Lever Pulling Task",
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
+
+#log rank test
+survdiff(Surv(lever2$time,lever2$status) ~ lever2$age)
+# p = .04 
 
 ```
 
 
-Dominance and exploratory scores
+Dominance Score affects bird's task performance 
 ```{r}
-#Is there a correlation between dominant 
 #km table, grouping by how dominant and exploratory the birds are: 
-lever2.km3 = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$dom_bin) + strata(lever2$expl_bin))
+lever2.km3 = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$dom_bin))
 
 ggsurvplot(fit = lever2.km3, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
-  labs(title = "The More Dominant, Exploratory Birds are Better at Pulling Lever",
-       y = "Probability of Pulling Lever", 
-       x = "Time (seconds)")
-  
-
-```
-
-Dominance and Exploratory scores 
-```{r}
-lever2.km3 = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$dom_bin) + strata(lever2$expl_bin))
-
-ggsurvplot(fit = lever2.km3, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
-  labs(title = "Dominant, Most Exploratory Birds are Best at Pulling Lever",
+  labs(title = "The More Dominant are Better at Pulling Lever",
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
 
-sum(is.na(lever2$dom_bin))
+#log rank test 
+survdiff(Surv(lever2$time,lever2$status) ~ lever2$dom_bin) #p = .09
+survdiff(Surv(lever2$time,lever2$status) ~ lever2$domscore) #p = .05
 
-
-
+#This large p values are probably due to the very small sample size!
 ```
+
 ##Initial Findings:
 
 From the survival curves above, the data suggests adult, rural birds with a high dominance and exploration scores are the most likely to complete the lever pulling task. It appears that age and dominance play a large role in determining likelihood in solving the problem. 
@@ -193,6 +183,7 @@ From the survival curves above, the data suggests adult, rural birds with a high
 Let's run a parametric regression model to compare coefficents for these covariates.  
 
 First things first, fitting our data to a parametric distribution: 
+
 
 ```{r}
 #preparing lever2 dataset for fitdistcens: 
@@ -202,26 +193,29 @@ lever3 = lever2 %>% mutate(left= ifelse(time == 0,time+.001,time),
 
 #weibull
 weibullFit.lever3=fitdistcens(data.frame(lever3[,c("left","right")]), dist = "weibull")
-summary(weibullFit.lever3)
+summary(weibullFit.lever3)$estimate
 plot(weibullFit.lever3)
 
+#fix.arg shape = 1 
 
 #exponential 
-#expFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "exp") #exponential does not work 
-#summary(expFit.lever3)
-#plot(expFit.lever3)
+expFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "exp") #exponential does not work 
+summary(expFit.lever3)
+plot(expFit.lever3)
 
 #lognnormal 
 logFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "lnorm")
-summary(logFit.lever3)
+summary(logFit.lever3)$estimate
 plot(logFit.lever3)
 
-gaussianFit.lever3 = fitdistcens(data.frame(lever3[,c("left","right")]), dist = "dgaussian")
+
 
 #assessing goodness of fits
 weibullFit.lever3$aic
-#expFit.lever3$aic #something is wrong here...
 logFit.lever3$aic
+
+#model vlues
+lnorm_values = rlnorm(100, meanlog = 7.536, sdlog =  2.6)
 
 
 
@@ -252,73 +246,59 @@ plnorm(1800, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
 qlnorm(0.5, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
 #1874.5 
 
+```
 
+fitting parametric lognormal curve
+```{r}
+lnorm_values = rlnorm(1000, meanlog = meanlog, sdlog = sdlog)
+
+modelfit.0 = tibble(time = pmin(8000,lnorm_values)) %>%                        
+                      mutate(status = ifelse(time == 8000, 0,1), dataType = "model") 
+
+observed.0 = lever2 %>% ungroup %>% dplyr::select(time, status) %>% mutate(dataType = "observed") 
+
+dist.0 = bind_rows(modelfit.0,observed.0)
+
+km.0 =  survfit(Surv(dist.0$time,dist.0$status) ~ strata(dist.0$dataType))
+
+ggsurvplot(fit = km.0, data = dist.0, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
 ```
 
 
-##Regression 
-4 covariates of interest: age, habitat, explscore, domscore 
+##Weibull Regression 
+
+Weibull regression modeling 100 birds each for 2 different levels of dominance
 ```{r}
 survObject=Surv(lever3$left,lever3$right,type="interval2")
 
-weibullMod = survreg(survObject~lever3$domscore + lever3$habitat + lever3$age, dist = "weibull")
+weibullMod = survreg(survObject~lever3$domscore, dist = "weibull")
 summary(weibullMod)
 
+b0 =  10.267
+b1 = -3.085 
 
-expMod = survreg(survObject~lever3$domscore + lever3$explscore, dist = "exponential")
-summary(expMod) #exponential does not work with multiple strata 
-
-logMod = survreg(survObject~lever3$domscore + strata(lever3$habitat) + strata(lever3$age), dist = "lognormal")
-summary(logMod)
-
-models = list(weibullMod, expMod, logMod)
-
-for(i in models){
-  print(AIC(i))
+#make random dominance scores for birds: 
+random_numbers <- function(n, min, max) {
+  random_values <- runif(n, min = min, max = max)
+  return(random_values)
 }
-#lognormal model is the best fit 
 
-#diagnostics 
-devresids=residuals(logMod,type="deviance")
-
-
-#lever3 %>%
-    #mutate(devresids=devresids) %>%
-    #ggplot(aes(y=devresids,x=age,fill=age)) +
-        #geom_boxplot() +
-        #geom_hline(yintercept = 0,linetype="dotted") +
-        #labs(title="Deviance Residuals for Weibull Model", x="age",y="Deviance Residuals") +
-        #coord_flip() +
-        #theme_minimal()
-
-#plotting residuals in throwing error due to presence of NAs, I believe. 
-
-
-#these models may not be most appropriate for this dataset
-
-```
-Weibull regression modeling 100 birds each for 3 different levels of dominance
-```{r}
-summary(weibullMod)
-
-b0 =  10.094
-b1 = -3.764
-b2 =  0.904 
-b3 =  0.463
+lows = random_numbers(100,.01,.5)
+highs = random_numbers(100,.51,.99)
 
 sigma  = summary(weibullMod)$scale
-lever3$domscore
 
-dom25_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.25))
-dom50_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.50))
-dom75_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.75))
+#choose domscores of .25 and .75 to simulate 
+low_dom_birds = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*lows))
+#dom50_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.50))
+high_dom_birds = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*highs))
 
-modelfit = tibble(domscore = rep(c(.25,.50,.75), each = 100), 
-                  time = pmin(8000,c(dom25_rural_adult,dom50_rural_adult,dom75_rural_adult))) %>%                        mutate(status = ifelse(time == 8000, 0,1), dataType = "model") %>% 
-            mutate(dom_bin = case_when( 
-                                  domscore <= .34 ~ "low", 
-                                  domscore > .34 & domscore <=.67 ~ "medium", 
-                                  domscore > .67 ~ "high"))
+modelfit = tibble(domscore = c(lows,highs), 
+                  time = pmin(8000,c(low_dom_birds,high_dom_birds))) %>%                        
+                      mutate(status = ifelse(time == 8000, 0,1), dataType = "model") %>% 
+                        mutate(dom_bin = case_when( 
+                                  domscore <= .50 ~ "low", 
+                                  domscore > .50 ~ "high"))
 
 lever4 = lever3 %>% dplyr::select(domscore,dom_bin,time, status) 
 lever4 = lever4 %>% ungroup %>% dplyr::select(-indiv, -habitat) %>% 
@@ -329,6 +309,28 @@ together = bind_rows(lever4, modelfit)
 km7 = survfit(Surv(together$time, together$status) ~ strata(together$dom_bin) + strata(together$dataType))
 
 ggsurvplot(fit = km7, data = together, fun = "event", conf.int = F, legend = "right")
+```
+
+Diagnostics 
+```{r}
+
+#diagnostics 
+devresids=residuals(weibullMod,type="deviance")
+
+#lever3 %>%
+    #mutate(devresids=devresids) %>%
+    #ggplot(aes(y=devresids,x=age,fill=age)) +
+        #geom_boxplot() +
+        #geom_hline(yintercept = 0,linetype="dotted") +
+        #labs(title="Deviance Residuals for logNormal Model", x="age",y="Deviance Residuals") +
+        #coord_flip() +
+        #theme_minimal()
+
+#plotting residuals in throwing error due to presence of NAs, I believe. 
+
+
+#these models may not be most appropriate for this dataset
+
 ```
 
 
@@ -380,12 +382,6 @@ Getting acquainted with the Paper trial dataset
 ```{r}
 paper
 skim(paper)
-
-
-#urband 
-
-
-
 ```
 
 ```{r}
@@ -426,7 +422,7 @@ survdiff(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
                                 explscore > 1 ~ "high"))
 
 #urban or rural: 
-paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$expl_bin) + strata(paper2$habitat))
+paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$expl_bin))
 
 ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds with Different Exploratory Scores")
 
