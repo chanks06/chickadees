@@ -376,11 +376,22 @@ solve: indicator of whether the task was solved in each time interval (0 = unsol
 site: code of each field site.
 habitat: rural (urban score < 0) or urban (urban score > 0) habitat type.
 
+Getting acquainted with the Paper trial dataset
+```{r}
+paper
+skim(paper)
+
+
+#urband 
+
+
+
+```
+
 ```{r}
 paper2 = paper %>% group_by(status, indiv, habitat) %>% summarize (time = max(tstop), contacts = sum(contacts), domscore = unique(domscore), urbanscore = unique(urbanscore), explscore = unique(explscore), solve = max(solve))
 
 #general km curve all birds (no strata):
-paper2.km = survfit(Surv(paper2$time,paper2$status) ~ 1)
 
 ggsurvplot(fit = paper2.km, data = paper2, risk.table = F, conf.int = T, fun = "event", surv.median.line = "hv") 
 
@@ -407,22 +418,51 @@ survdiff(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
 
 
 ```{r}
-#urban or rural: 
-paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ paper2$habitat)
+#binning expl_score 
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event") + labs(title = "Rural vs. Urban Birds")
+ paper2 = paper2 %>% mutate(expl_bin = case_when(
+                                explscore <= -1.5 ~ "low", 
+                                explscore > -1.5 & explscore <= 1 ~ "medium", 
+                                explscore > 1 ~ "high"))
+
+#urban or rural: 
+paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$expl_bin) + strata(paper2$habitat))
+
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds with Different Exploratory Scores")
 
 #rural birds are better at solving at the beginning, but by the end they have the same likelihood of solving problem. 
 
+```
 
-#urban or rural, stratify by age: 
-paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ paper2$habitat + strata())
+```{r}
+ggplot(paper2, aes(x = explscore, fill = habitat)) + geom_histogram()
+#most urban birds are less exploratory, likely due to availability of food
+```
+```{r}
+#comparing survival curves of urban vs. rural birds: 
+paper2.km.habitat = paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ paper2$habitat)
 
-ggsurvplot(fit = lever2.km4, data = lever2, risk.table = F, conf.int = F, fun = "event") + labs(title = "Juvenile vs. Adult Birds")
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right", surv.median.line = 'hv') + 
+  labs(title = "Rural vs. Urban Birds")
+
+#logrank test: 
+survdiff(Surv(paper2$time,paper2$status) ~ paper2$habitat)
+#p = 0.6 says that the different is not statistically significant, however small sample size may come into play here. 
+```
+Fitting parametric distribution
+```{r}
+paper3 = paper2 %>% mutate(left= ifelse(time == 0,time+.001,time), 
+                  right= ifelse(status == 1,left, NA))
+
+#weibull
+weibullFit.paper3=fitdistcens(data.frame(paper3[,c("left","right")]), dist = "weibull")
+summary(weibullFit.lever3)
+plot(weibullFit.lever3)
+
+#lognormal 
 
 
 ```
-
 
 ##DATASET 3: Persistence & Repeatability 
 
@@ -446,7 +486,8 @@ prcontacts: total number of contacts made with the paper-ripping task until the 
 
 
 ```{r}
-head(pr)
+
+
 ```
 
 
