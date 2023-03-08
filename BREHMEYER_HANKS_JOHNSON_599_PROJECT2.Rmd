@@ -215,45 +215,38 @@ qqcompcens(list(logFit.lever3,weibullFit.lever3),
            ,plotstyle = "ggplot")
 
 
-meanlog = summary(logFit.lever3)$estimate[1]
-sdlog = summary(logFit.lever3)$estimate[2]
 
-#What percent of birds are expected to pull the lever within 30 minutes? 
-plnorm(1800, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
-#49% 
 
-#at what time would have the birds pulled the lever? 
-qlnorm(0.5, meanlog = meanlog, sdlog = sdlog, lower.tail = TRUE )
-#1874.5 
+
 
 ```
 
 fitting parametric lognormal curve
 ```{r}
-lnorm_values = rlnorm(1000, meanlog = meanlog, sdlog = sdlog)
+meanlog.lever = summary(logFit.lever3)$estimate[1]
+sdlog.lever = summary(logFit.lever3)$estimate[2]
 
-modelfit.0 = tibble(time = pmin(8000,lnorm_values)) %>%                        
+lnorm_values = rlnorm(1000, meanlog = meanlog.lever, sdlog = sdlog.lever)
+
+modelfit.lever = tibble(time = pmin(8000,lnorm_values)) %>%                        
                       mutate(status = ifelse(time >= 8000, 0,1), dataType = "model") 
 
-observed.0 = lever2 %>% ungroup %>% dplyr::select(time, status) %>% mutate(dataType = "observed") 
+observed.lever = lever2 %>% ungroup %>% dplyr::select(time, status) %>% mutate(dataType = "observed") 
 
-dist.0 = bind_rows(modelfit.0,observed.0)
+dist.lever = bind_rows(modelfit.lever,observed.lever)
 
-km.0 =  survfit(Surv(dist.0$time,dist.0$status) ~ strata(dist.0$dataType))
+km.lever =  survfit(Surv(dist.0$time,dist.0$status) ~ strata(dist.0$dataType))
 
-ggsurvplot(fit = km.0, data = dist.0, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
+ggsurvplot(fit = km.lever, data = dist.lever, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
 
 #What percent of birds pulled the lever within 1800 second (a half hour?)
-plnorm(1800, meanlog = meanlog, sdlog = sdlog)
+plnorm(1800, meanlog = meanlog.lever, sdlog = sdlog.lever)
+#.49
+
+#at what time would half have the birds have pulled the lever? 
+qlnorm(0.5, meanlog = meanlog.lever, sdlog = sdlog.lever, lower.tail = TRUE )
+#1874.5 
 ```
-```{r}
-lever2.km.age = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$age))
-
-ggsurvplot(fit = lever2.km.age, data = lever2, conf.int = F, fun = "event", linetype = "strata", legend = "right")
-
-
-```
-
 
 ##Weibull Regression 
 
@@ -493,18 +486,6 @@ survdiff(Surv(paper2$time,paper2$status) ~  paper2$habitat)
 ```
 
 
-
-Fitting parametric distribution
-```{r}
-paper3 = paper2 %>% mutate(left= ifelse(time == 0,time+.001,time), 
-                  right= ifelse(status == 1,left, NA))
-
-#weibull
-weibullFit.paper3=fitdistcens(data.frame(paper3[,c("left","right")]), dist = "weibull")
-summary(weibullFit.lever3)
-plot(weibullFit.lever3)
-
-#lognormal 
 
 
 ```
