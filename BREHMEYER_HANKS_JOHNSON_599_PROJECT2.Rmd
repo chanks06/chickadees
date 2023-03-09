@@ -7,7 +7,8 @@ date: "2023-03-09"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = '/Users/charleshanks/repos/chickadees')
+#knitr::opts_knit$set(root.dir = '/Users/charleshanks/repos/chickadees')
+knitr::opts_knit$set(root.dir = '.')
 ```
 
 Loading Packages: 
@@ -141,7 +142,7 @@ Age
 #creating new km table, grouping by type of habitat and age of bird: 
 lever2.km2 = survfit(Surv(lever2$time,lever2$status) ~ lever2$age) 
 
-ggsurvplot(fit = lever2.km2, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
+ggsurvplot(fit = lever2.km2, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right", palette="Paired") + 
   labs(title = "Adults are better at Lever Pulling Task",
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
@@ -157,7 +158,7 @@ Dominance Score affects bird's task performance
 #km table, grouping by how dominant and exploratory the birds are: 
 lever2.km3 = survfit(Surv(lever2$time,lever2$status) ~ strata(lever2$dom_bin))
 
-ggsurvplot(fit = lever2.km3, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right") + 
+ggsurvplot(fit = lever2.km3, data = lever2, risk.table = F, conf.int = F, fun = "event", linetype = "strata", legend = "right", palette="Paired") + 
   labs(title = "The More Dominant are Better at Pulling Lever",
        y = "Probability of Pulling Lever", 
        x = "Time (seconds)")
@@ -235,9 +236,15 @@ observed.lever = lever2 %>% ungroup %>% dplyr::select(time, status) %>% mutate(d
 
 dist.lever = bind_rows(modelfit.lever,observed.lever)
 
-km.lever =  survfit(Surv(dist.0$time,dist.0$status) ~ strata(dist.0$dataType))
+km.lever =  survfit(Surv(dist.lever$time,dist.lever$status) ~ strata(dist.lever$dataType))
 
-ggsurvplot(fit = km.lever, data = dist.lever, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
+ggsurvplot(fit = km.lever, data = dist.lever, risk.table = F, conf.int = T
+           , fun = "event"
+           , linetype = "strata"
+           , palette="Dark2"
+           , legend = "right"
+           , surv.median.line = 'hv') + 
+  labs(title = "Lognormal Fit of Chickadee Lever Pulling Probability")
 
 #What percent of birds pulled the lever within 1800 second (a half hour?)
 plnorm(1800, meanlog = meanlog.lever, sdlog = sdlog.lever)
@@ -266,15 +273,15 @@ random_numbers <- function(n, min, max) {
   return(random_values)
 }
 
-lows = random_numbers(100,.01,.5)
-highs = random_numbers(100,.51,.99)
+lows = random_numbers(1000,.01,.5)
+highs = random_numbers(1000,.51,.99)
 
 sigma  = summary(weibullMod)$scale
 
 #choose domscores of .25 and .75 to simulate 
-low_dom_birds = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*lows))
+low_dom_birds = rweibull(1000, shape = 1/sigma, scale=exp(b0 + b1*lows))
 #dom50_rural_adult = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*.50))
-high_dom_birds = rweibull(100, shape = 1/sigma, scale=exp(b0 + b1*highs))
+high_dom_birds = rweibull(1000, shape = 1/sigma, scale=exp(b0 + b1*highs))
 
 modelfit = tibble(domscore = c(lows,highs), 
                   time = pmin(8000,c(low_dom_birds,high_dom_birds))) %>%                        
@@ -291,7 +298,9 @@ together = bind_rows(lever4, modelfit)
 
 km7 = survfit(Surv(together$time, together$status) ~ strata(together$dom_bin) + strata(together$dataType))
 
-ggsurvplot(fit = km7, data = together, fun = "event", conf.int = F, legend = "right")
+
+ggsurvplot(fit = km7, data = together, fun = "event", conf.int = F, legend = "right", palette="Paired")+ 
+  labs(title = "Weibull Fit of Chickadee Lever Pulling Probability")
 
 
 
@@ -336,7 +345,8 @@ In other words, given the quantity of birds that did not complete the task and a
 cox_mod = coxph(Surv(time, status) ~ domscore + explscore + habitat + age, data = lever3)
 summary(cox_mod)
 
-ggsurvplot(survfit(cox_mod), fun = "event", data = lever3, surv.median.line = "hv")
+ggsurvplot(survfit(cox_mod), fun = "event", data = lever3, surv.median.line = "hv", palette="Paired")+ 
+  labs(title = "Cox Mod of Chickadee Lever Pulling Probability")
 
 #this plot makes sense in comparing the median value of 
 median(lever3$time)
@@ -375,7 +385,10 @@ paper2 = paper %>% group_by(status, indiv, habitat) %>% summarize (time = max(ts
 
 #general km curve all birds (no strata):
 
-ggsurvplot(fit = paper2.km, data = paper2, risk.table = F, conf.int = T, fun = "event", surv.median.line = "hv") 
+paper2.km = survfit(Surv(paper2$time, paper2$status) ~1)
+
+ggsurvplot(fit = paper2.km, data = paper2, risk.table = F, conf.int = T, fun = "event", surv.median.line = "hv", palette = 'Paired') + 
+  labs(title = "KM Curve of Chickadee Paper Shredding Probability")
 
 ```
 Parametric fits
@@ -423,7 +436,13 @@ dist.paper = bind_rows(modelfit.paper,observed.paper)
 
 km.paper =  survfit(Surv(dist.paper$time,dist.paper$status) ~ strata(dist.paper$dataType))
 
-ggsurvplot(fit = km.paper, data = dist.paper, risk.table = F, conf.int = T, fun = "event", linetype = "strata", legend = "right", surv.median.line = 'hv') + labs(title = "Lognormal Fit of Chickadee Paper Ripping Probability")
+ggsurvplot(fit = km.paper, data = dist.paper, risk.table = F, conf.int = T
+           , fun = "event"
+           , palette = 'Dark2'
+           , linetype = "strata"
+           , legend = "right"
+           , surv.median.line = 'hv') + 
+  labs(title = "Lognormal Fit of Chickadee Paper Ripping Probability")
 
 ```
 
@@ -434,7 +453,8 @@ paper2 = paper2 %>%  mutate(dom_bin = case_when(domscore <= .5 ~ "low",
 
 paper2.km2 = survfit(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
 
-ggsurvplot(fit = paper2.km2, data = paper2, risk.table = F, conf.int = F, fun = "event") + labs(title = "Does more dominant mean better at paper test?")
+ggsurvplot(fit = paper2.km2, data = paper2, risk.table = F, conf.int = F, fun = "event", palette = 'Paired') + 
+  labs(title = "Does more dominant mean better at paper test?")
 
 #log rank test 
 survdiff(Surv(paper2$time,paper2$status) ~ paper2$dom_bin)
@@ -452,7 +472,8 @@ med_explscore = median(paper2$explscore)
 #binning expl_score 
 paper2 = paper2 %>% mutate(expl_bin = case_when(
                                 explscore <= med_explscore ~ "low", 
-                                explscore > med_explscore ~ "high"))
+                                explscore > med_explscore ~ "high")) %>% 
+        left_join(pr)
 
 paper2 %>% group_by(expl_bin, status) %>% count()
 #there are enough non-censored observation 
@@ -460,29 +481,34 @@ paper2 %>% group_by(expl_bin, status) %>% count()
 #examining km curves stratified by expl_bin: 
 paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~ strata(paper2$expl_bin))
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "How does expl_score fit ability to rip paper")
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right", palette = 'Paired') + 
+  labs(title = "Paper ripping by explorer score")
 #pretty similar km curves....
 
-survdiff(Surv(paper2$time,paper2$status) ~  strata(paper2$habitat))
+survdiff(Surv(time,status) ~  habitat, data = paper2)
+
 ```
 How does habitat affect task completion? 
 ```{r}
 #urban or rural: 
 paper2.km3 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$habitat))
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds")
+ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right", palette = 'Paired') + 
+  labs(title = "Paper Shredding: Rural vs. Urban Birds")
 
 #also very similar curves 
 survdiff(Surv(paper2$time,paper2$status) ~  paper2$habitat)
 ```
 How about age?
 ```{r}
-paper2.km4 = survfit(Surv(paper2$time,paper2$status) ~  paper2$age)
 
-ggsurvplot(fit = paper2.km3, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right") + labs(title = "Rural vs. Urban Birds")
+paper2.km4 = survfit(Surv(paper2$time,paper2$status) ~  strata(paper2$age))
+
+ggsurvplot(fit = paper2.km4, data = paper2, risk.table = F, conf.int = F, fun = "event", legend = "right", palette = 'Paired') + 
+  labs(title = "Paper Shredding: Adult vs. Juvenile Birds")
 
 #also very similar curves 
-survdiff(Surv(paper2$time,paper2$status) ~  paper2$habitat)
+survdiff(Surv(paper2$time,paper2$status) ~  paper2$age)
 ```
 
 
